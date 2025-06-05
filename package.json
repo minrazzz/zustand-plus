@@ -4,6 +4,14 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minrazzz/zustand-plus.git"
+  },
+  "homepage": "https://github.com/minrazzz/zustand-plus",
+  "bugs": {
+    "url": "https://github.com/minrazzz/zustand-plus/issues"
+  },
   "files": [
     "dist"
   ],
@@ -16,9 +24,10 @@
   "keywords": [
     "zustand",
     "state-management",
-    "store",
     "react",
-    "typescript"
+    "typescript",
+    "persistence",
+    "store"
   ],
   "author": "",
   "license": "ISC",
