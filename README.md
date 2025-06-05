@@ -10,12 +10,11 @@ npm install zustand-plus
 
 ## Features
 
-- 🔄 **Automatic Update Tracking** - Built-in `lastUpdateTime` and `markUpdate()`
-- 🛡️ **Safe State Mutations** - `update()` method with automatic deep cloning
-- 💾 **Easy Persistence** - Simplified persistent store creation
 - 🔗 **Method Composition** - Call methods from within other methods
-- 🧰 **Utility Functions** - Deep cloning and validation helpers
-- 📦 **TypeScript Support** - Full type safety out of the box
+- 🛡️ **Safe State Mutations** - Direct mutations with automatic cloning
+- 🔄 **Automatic Update Tracking** - Built-in `lastUpdateTime`
+- 💾 **Easy Persistence** - One-line persistent stores
+- 📦 **TypeScript Support** - Full type safety
 
 ## Quick Start
 
@@ -25,53 +24,117 @@ import { createStore, createPersistStore } from "zustand-plus";
 // Basic store
 const useCounter = createStore({ count: 0 }, (set, get) => ({
   increment: () => set((state) => ({ count: state.count + 1 })),
-  safeUpdate: () =>
-    get().update((state) => {
-      state.count += 10; // Mutate safely
-    }),
+  decrement: () => set((state) => ({ count: state.count - 1 })),
+  reset: () => set({ count: 0 }),
 }));
 
 // Persistent store
 const useSettings = createPersistStore(
   { theme: "light", language: "en" },
   (set, get) => ({
-    updateTheme: (theme) => set({ theme }),
-    bulkUpdate: (updates) =>
-      get().update((state) => {
-        Object.assign(state, updates);
-      }),
+    setTheme: (theme) => set({ theme }),
+    setLanguage: (language) => set({ language }),
   }),
   { name: "app-settings" }
 );
 ```
 
-## Feature Demos
+## 🔗 Method Composition - The Game Changer
 
-### 🔗 Method Composition
-
-Call methods from within other methods - impossible with standard Zustand:
+**The Problem with Standard Zustand:**
 
 ```typescript
-const useTaskStore = createStore({ tasks: [], filter: "all" }, (set, _get) => {
+// ❌ Can't call methods from within other methods
+const useStore = create((set, get) => ({
+  count: 0,
+  increment: () => set((state) => ({ count: state.count + 1 })),
+
+  // This doesn't work - get() only returns state
+  doubleIncrement: () => {
+    // get().increment(); // ❌ Error - increment is not available
+    // Have to duplicate logic instead
+    set((state) => ({ count: state.count + 2 }));
+  },
+}));
+```
+
+**The Solution with Zustand Enhanced:**
+
+```typescript
+// ✅ Methods can call other methods easily
+const useCounterStore = createStore({ count: 0 }, (set, _get) => {
+  function get() {
+    return { ..._get(), ...methods }; // 🎯 Key pattern
+  }
+
+  const methods = {
+    increment: () => set((state) => ({ count: state.count + 1 })),
+    decrement: () => set((state) => ({ count: state.count - 1 })),
+    reset: () => set({ count: 0 }),
+
+    // ✨ Now you can call other methods!
+    doubleIncrement: () => {
+      get().increment();
+      get().increment();
+    },
+
+    incrementAndReset: () => {
+      get().increment();
+      setTimeout(() => get().reset(), 1000);
+    },
+
+    smartIncrement: () => {
+      const { count } = get();
+      if (count < 10) {
+        get().increment();
+      } else {
+        get().reset();
+      }
+    },
+  };
+
+  return methods;
+});
+```
+
+## Real-World Examples
+
+### 🛒 Shopping Cart
+
+```typescript
+const useCartStore = createStore({ items: [], total: 0 }, (set, _get) => {
   function get() {
     return { ..._get(), ...methods };
   }
 
   const methods = {
-    addTask: (task) =>
+    addItem: (item) =>
       set((state) => ({
-        tasks: [...state.tasks, { ...task, id: Date.now() }],
+        items: [...state.items, { ...item, id: Date.now() }],
       })),
 
-    clearCompleted: () =>
+    removeItem: (id) =>
       set((state) => ({
-        tasks: state.tasks.filter((t) => !t.completed),
+        items: state.items.filter((item) => item.id !== id),
       })),
 
-    // ✨ Call other methods seamlessly
-    addAndCleanup: (task) => {
-      get().addTask(task);
-      get().clearCompleted();
+    calculateTotal: () => {
+      const { items } = get();
+      const total = items.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+      set({ total });
+    },
+
+    // ✨ Combine multiple operations
+    addItemAndCalculate: (item) => {
+      get().addItem(item);
+      get().calculateTotal(); // Call another method!
+    },
+
+    clearCart: () => {
+      set({ items: [], total: 0 });
       get().markUpdate(); // Built-in tracking
     },
   };
@@ -80,39 +143,76 @@ const useTaskStore = createStore({ tasks: [], filter: "all" }, (set, _get) => {
 });
 ```
 
-### 🛡️ Safe State Mutations
-
-Mutate complex nested state without manual cloning:
+### 🎨 Theme Manager
 
 ```typescript
-const useCartStore = createStore(
-  { items: [], totals: { subtotal: 0, tax: 0, total: 0 } },
-  (set, get) => ({
-    updateQuantity: (productId, quantity) => {
-      get().update((state) => {
-        // Direct mutation - automatically cloned
-        const item = state.items.find((i) => i.id === productId);
-        if (item) {
-          item.quantity = quantity;
-          item.total = item.price * quantity;
-        }
+const useThemeStore = createPersistStore(
+  {
+    theme: "light",
+    fontSize: 16,
+    sidebarOpen: false,
+  },
+  (set, _get) => {
+    function get() {
+      return { ..._get(), ...methods };
+    }
 
-        // Recalculate totals
-        state.totals.subtotal = state.items.reduce(
-          (sum, item) => sum + item.total,
-          0
-        );
-        state.totals.tax = state.totals.subtotal * 0.1;
-        state.totals.total = state.totals.subtotal + state.totals.tax;
+    const methods = {
+      setTheme: (theme) => set({ theme }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      toggleSidebar: () =>
+        set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+
+      // ✨ Complex operations made simple
+      switchToDarkMode: () => {
+        get().setTheme("dark");
+        get().setFontSize(18); // Bigger font for dark mode
+        if (!get().sidebarOpen) {
+          get().toggleSidebar(); // Open sidebar in dark mode
+        }
+      },
+
+      resetToDefaults: () => {
+        get().setTheme("light");
+        get().setFontSize(16);
+        set({ sidebarOpen: false });
+      },
+    };
+
+    return methods;
+  },
+  { name: "theme-settings" }
+);
+```
+
+## 🛡️ Safe State Mutations
+
+Update complex nested state without manual cloning:
+
+```typescript
+const useProfileStore = createStore(
+  {
+    user: { name: "", email: "" },
+    preferences: { notifications: true, theme: "light" },
+    settings: { privacy: { public: false } },
+  },
+  (set, get) => ({
+    updateUserName: (name) => {
+      get().update((state) => {
+        state.user.name = name; // Direct mutation - safely cloned
+      });
+    },
+
+    togglePrivacy: () => {
+      get().update((state) => {
+        state.settings.privacy.public = !state.settings.privacy.public;
       });
     },
   })
 );
 ```
 
-### 🔄 Automatic Update Tracking
-
-Built-in tracking without extra setup:
+## 🔄 Automatic Update Tracking
 
 ```typescript
 const useDataStore = createStore(
@@ -120,9 +220,9 @@ const useDataStore = createStore(
   (set, get) => ({
     fetchData: async () => {
       set({ loading: true });
-      const data = await api.getData();
+      const data = await fetch("/api/data").then((r) => r.json());
       set({ data, loading: false });
-      // lastUpdateTime automatically updated
+      // lastUpdateTime automatically updated!
     },
 
     getLastSync: () => {
@@ -135,50 +235,42 @@ const useDataStore = createStore(
 );
 ```
 
-### 💾 Simple Persistence
+## Why Choose Zustand Enhanced?
 
-One-line persistent stores:
+| Feature         | Standard Zustand                                  | Zustand Enhanced                       |
+| --------------- | ------------------------------------------------- | -------------------------------------- |
+| Method calls    | ❌ `get().increment()` doesn't work               | ✅ `get().increment()` works perfectly |
+| Complex updates | ❌ Manual `{...state, nested: {...state.nested}}` | ✅ `state.nested.value = newValue`     |
+| Update tracking | ❌ Manual implementation                          | ✅ Built-in `lastUpdateTime`           |
+| Persistence     | ❌ Complex middleware setup                       | ✅ One-line `createPersistStore`       |
+
+## Usage in React
 
 ```typescript
-const useUserPreferences = createPersistStore(
-  {
-    theme: "light",
-    notifications: true,
-    language: "en",
-  },
-  (set, get) => ({
-    toggleTheme: () =>
-      set((state) => ({
-        theme: state.theme === "light" ? "dark" : "light",
-      })),
+function Counter() {
+  const { count, increment, doubleIncrement, smartIncrement } =
+    useCounterStore();
 
-    updateSettings: (settings) =>
-      get().update((state) => {
-        Object.assign(state, settings);
-      }),
-  }),
-  { name: "user-preferences" } // Automatically synced to localStorage
-);
+  return (
+    <div>
+      <p>Count: {count}</p>
+      <button onClick={increment}>+1</button>
+      <button onClick={doubleIncrement}>+2</button>
+      <button onClick={smartIncrement}>Smart +</button>
+    </div>
+  );
+}
 ```
-
-## Why Better Than Standard Zustand?
-
-| Feature            | Standard Zustand                | Zustand Enhanced                   |
-| ------------------ | ------------------------------- | ---------------------------------- |
-| Method composition | ❌ `get()` only returns state   | ✅ `get()` returns state + methods |
-| Complex updates    | ❌ Manual deep cloning required | ✅ `update()` handles cloning      |
-| Update tracking    | ❌ Manual implementation needed | ✅ Built-in `lastUpdateTime`       |
-| Persistence        | ❌ Verbose middleware setup     | ✅ One-line `createPersistStore`   |
 
 ## API Reference
 
-### `createStore(state, methods)`
+### `createStore(initialState, methods)`
 
-Creates an enhanced store with update tracking and method composition.
+Create an enhanced store with method composition.
 
-### `createPersistStore(state, methods, options)`
+### `createPersistStore(initialState, methods, options)`
 
-Creates a persistent store that syncs to localStorage.
+Create a persistent store that syncs to localStorage.
 
 ### Built-in Methods
 
@@ -188,7 +280,5 @@ Creates a persistent store that syncs to localStorage.
 
 ### Utilities
 
-- `deepClone(obj)` - Deep clone objects
-- `ensure(obj, keys)` - Validate required properties
-# zustand-plus
-# zustand-plus
+- `deepClone<T>(obj)` - Deep clone any object
+- `ensure<T>(obj, keys)` - Validate required properties
